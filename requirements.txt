@@ -4,5 +4,6 @@ pandas
 scipy
 scikit-learn
 joblib
-matplotlib
 plotly
+matplotlib
+reportlab
