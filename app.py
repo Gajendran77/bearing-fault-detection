@@ -120,3 +120,23 @@ if file is not None:
 
 else:
     st.info("Upload vibration data to start analysis")
+
+import os
+
+image_map = {
+    "Normal": "images/normal.png",
+    "Inner Race": "images/inner_race.png",
+    "Outer Race": "images/outer_race.png",
+    "Ball Fault": "images/ball_fault.png"
+}
+
+if prediction in image_map:
+    st.subheader("Bearing Fault Illustration")
+
+    image_path = image_map[prediction]
+
+    if os.path.exists(image_path):
+        st.image(image_path, width=350)
+    else:
+        st.error(f"Image not found: {image_path}")
+
