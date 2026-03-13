@@ -2,64 +2,55 @@ import streamlit as st
 import numpy as np
 import pandas as pd
 import joblib
-import matplotlib.pyplot as plt
+import plotly.express as px
 from scipy.stats import kurtosis, skew
 from scipy.fft import fft
 from scipy.io import loadmat
 
-# Load trained model
+st.set_page_config(page_title="Bearing Fault Dashboard", layout="wide")
+
+# -------- Custom CSS (Dark Dashboard UI) --------
+st.markdown("""
+<style>
+body {
+    background-color: #0f172a;
+}
+.metric-card {
+    background-color:#1e293b;
+    padding:20px;
+    border-radius:12px;
+    text-align:center;
+    color:white;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# -------- Sidebar --------
+st.sidebar.title("⚙️ Bearing Monitor")
+st.sidebar.write("Upload vibration signal")
+
+# Load model
 model = joblib.load("bearing_model.pkl")
 
-st.title("AI Bearing Fault Detection System")
+file = st.sidebar.file_uploader("Upload file", type=["csv","mat"])
 
-file = st.file_uploader("Upload vibration data (.csv or .mat)", type=["csv","mat"])
+st.title("AI Bearing Condition Monitoring Dashboard")
 
 if file is not None:
 
-    # ---------- Load File ----------
+    # ---------- Load Signal ----------
     if file.name.endswith(".csv"):
         data = pd.read_csv(file)
         signal = data.values.flatten()
 
-    elif file.name.endswith(".mat"):
+    else:
         mat = loadmat(file)
-
-        # automatically find vibration signal variable
         signal = None
         for key in mat.keys():
             if "DE_time" in key:
                 signal = mat[key].flatten()
 
-        if signal is None:
-            st.error("No vibration signal found in MAT file.")
-            st.stop()
-
-    # ---------- Waveform ----------
-    st.subheader("Vibration Waveform")
-
-    fig1, ax1 = plt.subplots()
-    ax1.plot(signal)
-    ax1.set_xlabel("Sample")
-    ax1.set_ylabel("Amplitude")
-    ax1.set_title("Time Domain Signal")
-
-    st.pyplot(fig1)
-
-    # ---------- FFT Spectrum ----------
-    st.subheader("FFT Spectrum")
-
-    fft_values = np.abs(fft(signal))
-    freq = np.arange(len(fft_values))
-
-    fig2, ax2 = plt.subplots()
-    ax2.plot(freq[:500], fft_values[:500])
-    ax2.set_xlabel("Frequency")
-    ax2.set_ylabel("Magnitude")
-    ax2.set_title("Frequency Spectrum")
-
-    st.pyplot(fig2)
-
-    # ---------- Feature Extraction ----------
+    # ---------- Features ----------
     rms = np.sqrt(np.mean(signal**2))
     kurt = kurtosis(signal)
     sk = skew(signal)
@@ -68,12 +59,64 @@ if file is not None:
 
     X = [[rms, kurt, sk, peak, std]]
 
-    # ---------- Prediction ----------
-    prediction = model.predict(X)
-    confidence = np.max(model.predict_proba(X)) * 100
+    prediction = model.predict(X)[0]
+    confidence = np.max(model.predict_proba(X))*100
 
-    st.subheader("Prediction Result")
-    st.write("Detected Fault:", prediction[0])
+    # -------- KPI CARDS --------
+    c1,c2,c3,c4 = st.columns(4)
 
-    st.subheader("Prediction Confidence")
-    st.write(f"{confidence:.2f}%")
+    c1.metric("RMS", round(rms,3))
+    c2.metric("Kurtosis", round(kurt,3))
+    c3.metric("Peak", round(peak,3))
+    c4.metric("Confidence", f"{confidence:.1f}%")
+
+    st.divider()
+
+    # -------- Waveform --------
+    col1,col2 = st.columns(2)
+
+    df = pd.DataFrame({"signal":signal})
+
+    with col1:
+        st.subheader("Vibration Waveform")
+        fig = px.line(df,y="signal")
+        st.plotly_chart(fig,use_container_width=True)
+
+    # -------- FFT --------
+    with col2:
+
+        st.subheader("Frequency Spectrum")
+
+        fft_values = np.abs(fft(signal))
+        freq = np.arange(len(fft_values))
+
+        df_fft = pd.DataFrame({
+            "freq":freq[:500],
+            "amp":fft_values[:500]
+        })
+
+        fig2 = px.line(df_fft,x="freq",y="amp")
+
+        st.plotly_chart(fig2,use_container_width=True)
+
+    st.divider()
+
+    # -------- Prediction Panel --------
+    col3,col4 = st.columns(2)
+
+    with col3:
+        st.subheader("Fault Prediction")
+        st.success(prediction)
+
+    with col4:
+        st.subheader("Health Indicator")
+
+        if confidence > 90:
+            st.progress(100)
+        elif confidence > 70:
+            st.progress(70)
+        else:
+            st.progress(40)
+
+else:
+    st.info("Upload vibration data to start analysis")
